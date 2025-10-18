@@ -64,9 +64,16 @@ if __name__ == "__main__":
 
     for dir_prefix in DIRS_TO_DOWNLOAD:
         print("Downloading directory:", dir_prefix)
-        response = s3_client.list_objects_v2(Bucket=BUCKET, Prefix=dir_prefix)
-        for obj in response.get('Contents', []):
-            key = obj['Key']
-            local_path = os.path.join(OUTPUT_DIR, dir_prefix, os.path.basename(key))
-            download_file_from_s3(s3_client, BUCKET, key, local_path, verbose=False)
+        paginator = s3_client.get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket=BUCKET, Prefix=dir_prefix)
+        count = 0
+        for page in pages:
+            for obj in page['Contents']:
+                key = obj['Key']
+                local_path = os.path.join(OUTPUT_DIR, key)
+                download_file_from_s3(s3_client, BUCKET, key, local_path, verbose=False)
+                count += 1
+                if count % 500 == 0:
+                    print(f"  Downloaded {count} objects...")
+        print("Total objects downloaded:", count)
         print("Download complete.")

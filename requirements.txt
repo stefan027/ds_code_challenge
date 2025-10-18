@@ -1,0 +1,4 @@
+boto3==1.37.38
+numpy==2.3.4
+pandas==2.3.3
+geopandas==1.1.1

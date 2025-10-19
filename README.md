@@ -61,7 +61,49 @@ python scripts/download_data.py
 TODO
 
 ## Compution vision classification challenge
-TODO
+
+### Baseline model
+The baseline image classifier can be found in [`./notebooks/classification_model_v0.ipynb`](./notebooks/classification_model_v0.ipynb). The model uses a pre-trained `convnext-tiny` backbone from the `timm` library with a custom binary classification head.
+
+### Experiments
+Various experiments were performed to test possible improvements to the baseline models. The main experiments are briefly summarised below.
+
+- [`notebooks/classification_model_experiment_01.ipynb`](notebooks/classification_model_experiment_01.ipynb): The aim of this experiment is to measure whether the model accuracy can be improved if we use higher image resolutions. To do this, we will replace the pretrained `convnext_tiny` backbone with a version of `convnext_tiny` that was trained on on 384x384 images instead of the 224x224 images used for our original model. This model (`convnext_tiny.in12k_ft_in1k_384` in `timm`) achieves 1% higher top-1 accuracy on ImageNet than our baseline model.
+- [`notebooks/classification_model_experiment_02.ipynb`](notebooks/classification_model_experiment_02.ipynb) The aim of this experiment is to measure whether the model accuracy can be improved by scaling up the model size. To do this, we will replace the pretrained `convnext_tiny.in12k_ft_in1k_384` backbone from experiment 01 with a version of `convnext_small` that was also trained on on 384x384 images. This model (`convnext_small.in12k_ft_in1k_384` in `timm`) achieves 1% higher top-1 accuracy on ImageNet than `convnext_tiny.in12k_ft_in1k_384`. The convnext_small model has 50.2M parameters compared to the 28.6M of convnext_tiny.
+- [`notebooks/classification_model_experiment_03.ipynb`](notebooks/classification_model_experiment_01.ipynb) The aim of this experiment is to test a different backbone. To do this, we will replace the pretrained convnext backbone with a version of `CAFormer`. The specific version (`caformer_s36.sail_in22k_ft_in1k_384` in `timm`) achieves 0.7% higher top-1 accuracy on ImageNet than `convnext_small.in12k_ft_in1k_384` while having 10M fewer parameters.
+
+### Evaluation metrics
+We will evaluate the following metrics on the validation set:
+
+- [Balanced accuracy score](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.balanced_accuracy_score.html)
+- [Average Precision (AP)](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.average_precision_score.html)
+- [Precision](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_score.html)
+- [Recall](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.recall_score.html)
+- [Area Under the Receiver Operating Characteristic Curve (ROC AUC)](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.recall_score.html)
+
+### Final model
+The `CAFormer` model shown significant improvement over the convnext models on most metrics. We will therefore proceed with `caformer_s36.sail_in22k_ft_in1k_384` as the model of choice.
+
+In the final training run, we train the model for more epochs, and add basic data augmentations to prevent overfitting and to expose the model to more diverse training data.
+
+There are two training implementations - one in a notebook, and one in a Python script that generates HTML and Markdown output files.
+
+#### Notebook training
+See [`notebooks/classification_model_experiment_04.ipynb`](notebooks/classification_model_experiment_04.ipynb)
+
+#### Python script training
+The script can be found in [`scripts/train.py`](scripts/train.py). To run the script, execute the following from the root of the repo:
+```bash
+python scripts/train.py
+```
+
+The script assumes that the image data is available in `./data` in this directory. All outputs are saved in `./output` and model weights are saved in `./models`. If these directories do not exist, they will be created by the script.
+
+The final HTML (and Markdown) output files are available in this repository. Please see [here for the HTML version](./output/final_classifier_summary.html) and [here for the Markdown version](./output/final_classifier_summary.md).
+
+
+### Hardware requirements
+It is recommended to run training on GPUs. All the models can be trained on T4 GPUs like those available in Kaggle and the free tier of Google Colab. Test were specifically run on Kaggle notebooks, and Kaggle-specific instructions are provided in the notebooks.
 
 ### Utilities
 With the availability of thousands of pre-trained image classification models, it can be challenging to decide which models to use for any given task. It is usually necessary to consider a trade-off between classification accuracy, model size (in terms of number of parameters) and speed. The `timm` library maintains a list of validation and benchmarks results for models in that collection. A notebook is provided that downloads the ImageNet validation results from GitHub, and performs an analysis to determine which models may be strong performers. See [`notebooks/compare_pretrained_models.ipynb`](./notebooks/compare_pretrained_models.ipynb) for details. 

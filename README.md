@@ -56,3 +56,12 @@ If AWS credentials were already configured, simply run:
 ```bash
 python scripts/download_data.py
 ```
+
+## Initial data transformation exercise
+TODO
+
+## Compution vision classification challenge
+TODO
+
+### Utilities
+With the availability of thousands of pre-trained image classification models, it can be challenging to decide which models to use for any given task. It is usually necessary to consider a trade-off between classification accuracy, model size (in terms of number of parameters) and speed. The `timm` library maintains a list of validation and benchmarks results for models in that collection. A notebook is provided that downloads the ImageNet validation results from GitHub, and performs an analysis to determine which models may be strong performers. See [`notebooks/compare_pretrained_models.ipynb`](./notebooks/compare_pretrained_models.ipynb) for details. 

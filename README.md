@@ -57,8 +57,33 @@ If AWS credentials were already configured, simply run:
 python scripts/download_data.py
 ```
 
-## Initial data transformation exercise
-TODO
+## Initial data transformation task
+Both a Python script and Jupyter notebook are available for this task. The Python script can be found in [`./scripts/data_transformation.py`](./scripts/data_transformation.py). The notebook can be found in [`./notebooks/data_transformation.ipynb`](./notebooks/data_transformation.ipynb).
+
+When running the notebook, the paths to the relevant input files as well as the error threshold can be set by changing the constants at the top of the notebook.
+
+The Python script can be run as follows:
+```bash
+python scripts/data_transformation.py -d <path-to-data-directory> -e <error-threshold>
+```
+For example:
+```bash
+python scripts/data_transformation.py -d ./data -e 0.05
+```
+
+The logged output should like this:
+```
+2025-10-20 08:23:33,281 - INFO - Total records: 941634
+2025-10-20 08:23:33,281 - INFO - Records with missing coordinates: 212364
+2025-10-20 08:23:33,281 - INFO - Failed joins: 0 (0.00%)
+2025-10-20 08:23:33,281 - INFO - Join completed in 334.15 seconds
+Mismatched records compared to `sr_hex.csv`:
+match
+True     941631
+False         3
+Name: count, dtype: int64
+```
+
 
 ## Compution vision classification challenge
 

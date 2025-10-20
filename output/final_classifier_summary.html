@@ -1,0 +1,1173 @@
+
+<html>
+<head>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown.min.css">
+<style>
+body {
+  box-sizing: border-box;
+  min-width: 200px;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 45px;
+}
+</style>
+</head>
+<body class="markdown-body">
+<h1>Computer Vision classification challenge</h1>
+<h2>Task description</h2>
+<p>Use a sample of images from the swimming-pool dataset to develop a model that classifies whether
+an image contains a swimming pool or not. Use the provided labels to validate your model.</p>
+<h2>Solution overview</h2>
+<p>This script fine-tunes a 39M parameter <a href="https://arxiv.org/abs/2210.13452"><code>CAFormer</code></a> image
+classification model on the swimming-pool dataset. The dataset consists of aerial images from
+Cape Town, and is labelled for the presence of swimming pools or not</p>
+<p>A series of experiments were conducted to find the best model architecture, training strategy, and hyperparameters.
+Detailed results and analysis of these experiments can be found in the <code>./notebooks</code> directory in the repository.</p>
+<p>A notebook version of this script is also available as a Jupyter notebook.
+Please see <code>./notebooks/classification_model_experiment_04.ipynb</code>.</p>
+<p>We will evaluate the following metrics on the validation set:</p>
+<ul>
+<li><a href="https://scikit-learn.org/stable/modules/generated/sklearn.metrics.balanced_accuracy_score.html">Balanced accuracy score</a></li>
+<li><a href="https://scikit-learn.org/stable/modules/generated/sklearn.metrics.average_precision_score.html">Average Precision (AP)</a></li>
+<li><a href="https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_score.html">Precision</a></li>
+<li><a href="https://scikit-learn.org/stable/modules/generated/sklearn.metrics.recall_score.html">Recall</a></li>
+<li><a href="https://scikit-learn.org/stable/modules/generated/sklearn.metrics.recall_score.html">Area Under the Receiver Operating Characteristic Curve (ROC AUC)</a></li>
+</ul>
+<h2>Package versions</h2>
+<p>We keep track of the package versions used for reproducibility. The following key packages were used:</p>
+<ul>
+<li>torch==2.8.0</li>
+<li>torchvision==0.23.0</li>
+<li>fastai==2.8.4</li>
+<li>timm==1.0.20</li>
+</ul>
+<h2>Data overview</h2>
+<p>Number of image files: 7043</p>
+<h3>Class distribution</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">label</th>
+<th style="text-align: right;">count</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">4643</td>
+</tr>
+<tr>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">2400</td>
+</tr>
+</tbody>
+</table>
+<h3>Training and validation sets</h3>
+<p>We will use a random 20% of the data as the validation set. That means that 20% of the images will be held out from training and used to evaluate model performance after training.
+While there is class imbalance in the dataset, given that we only have two classes and we have a relatively large sample of images, doing a simple random split should result in similarly balanced training and validation splits.</p>
+<p>Training/validation split summary:</p>
+<ul>
+<li>Training set size:   5635</li>
+<li>Validation set size: 1408</li>
+</ul>
+<p>Percentage positive class:</p>
+<ul>
+<li>Training:   66.1%</li>
+<li>Validation: 65.4%</li>
+</ul>
+<h3>Sample images</h3>
+<h4>Sample image 1 - with swimming pool</h4>
+<p>Image path: ../ds_code_challenge_data/images/swimming-pool/yes/W35A_7_58.tif</p>
+<p><img src='sample_images/pos_1794.png' alt='Swimming Pool - Yes'/></p>
+<h4>Sample image 2 - with swimming pool</h4>
+<p>Image path: ../ds_code_challenge_data/images/swimming-pool/yes/W18B_8_68.tif</p>
+<p><img src='sample_images/pos_1557.png' alt='Swimming Pool - Yes'/></p>
+<h4>Sample image 3 - without swimming pool</h4>
+<p>Image path: ../ds_code_challenge_data/images/swimming-pool/no/W17B_13_12.tif</p>
+<p><img src='sample_images/neg_1026.png' alt='Swimming Pool - No'/></p>
+<h4>Sample image 4 - without swimming pool</h4>
+<p>Image path: ../ds_code_challenge_data/images/swimming-pool/no/W25A_16_45.tif</p>
+<p><img src='sample_images/neg_560.png' alt='Swimming Pool - No'/></p>
+<h2>Data transformations and augmentations</h2>
+<p>Image transformations are required to resize the images to the input size expected by the model backbone or to reduce the memory footprint during training. Images must also be normalised using the same mean and standard deviation as used during pretraining of the model backbone. We will also apply some data augmentations to the training images to reduce overfitting and improve model generalisation by exposing the model to more diverse training data.</p>
+<p>The following transformations and augmentations will be applied to the training images:</p>
+<ul>
+<li>Resize<ul>
+<li>area_for_downscale: None</li>
+<li>height: 384</li>
+<li>interpolation: 1</li>
+<li>mask_interpolation: 0</li>
+<li>p: 1.0</li>
+<li>width: 384</li>
+</ul>
+</li>
+<li>HorizontalFlip<ul>
+<li>p: 0.5</li>
+</ul>
+</li>
+<li>RandomBrightnessContrast<ul>
+<li>brightness_by_max: True</li>
+<li>brightness_limit: (-0.2, 0.2)</li>
+<li>contrast_limit: (-0.2, 0.2)</li>
+<li>ensure_safe_range: False</li>
+<li>p: 0.2</li>
+</ul>
+</li>
+<li>Normalize<ul>
+<li>max_pixel_value: 255.0</li>
+<li>mean: (0.485, 0.456, 0.406)</li>
+<li>normalization: standard</li>
+<li>p: 1.0</li>
+<li>std: (0.229, 0.224, 0.225)</li>
+</ul>
+</li>
+</ul>
+<h2>Model setup</h2>
+<p>We will use a pretrained model from the <code>timm</code> library as the backbone of our classifier. The final classification head will be randomly initialised. For detailed information about the model architecture, see the Appendix.</p>
+<ul>
+<li>Model backbone: <code>caformer_s36.sail_in22k_ft_in1k_384</code></li>
+</ul>
+<h2>Model training</h2>
+<ul>
+<li>Freeze all model parameters except for the classification head and train the head for 1 epochs.</li>
+<li>Unfreeze all model parameters and fine-tune the entire model for 5 epochs.</li>
+</ul>
+<h3>Training log for fine-tuning the classifier head</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">epoch</th>
+<th style="text-align: right;">train_loss</th>
+<th style="text-align: right;">valid_loss</th>
+<th style="text-align: right;">balanced_accuracy_score</th>
+<th style="text-align: right;">average_precision_score</th>
+<th style="text-align: right;">precision_score</th>
+<th style="text-align: right;">recall_score</th>
+<th style="text-align: right;">roc_auc_score</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0.226964</td>
+<td style="text-align: right;">0.219799</td>
+<td style="text-align: right;">0.901068</td>
+<td style="text-align: right;">0.982425</td>
+<td style="text-align: right;">0.940583</td>
+<td style="text-align: right;">0.910966</td>
+<td style="text-align: right;">0.967554</td>
+</tr>
+</tbody>
+</table>
+<h3>Training log for full model fine-tuning</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">epoch</th>
+<th style="text-align: right;">train_loss</th>
+<th style="text-align: right;">valid_loss</th>
+<th style="text-align: right;">balanced_accuracy_score</th>
+<th style="text-align: right;">average_precision_score</th>
+<th style="text-align: right;">precision_score</th>
+<th style="text-align: right;">recall_score</th>
+<th style="text-align: right;">roc_auc_score</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0.190582</td>
+<td style="text-align: right;">0.223514</td>
+<td style="text-align: right;">0.897789</td>
+<td style="text-align: right;">0.983291</td>
+<td style="text-align: right;">0.924307</td>
+<td style="text-align: right;">0.941368</td>
+<td style="text-align: right;">0.969273</td>
+</tr>
+<tr>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">0.178578</td>
+<td style="text-align: right;">0.206356</td>
+<td style="text-align: right;">0.898708</td>
+<td style="text-align: right;">0.984618</td>
+<td style="text-align: right;">0.934807</td>
+<td style="text-align: right;">0.918567</td>
+<td style="text-align: right;">0.97152</td>
+</tr>
+<tr>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">0.170165</td>
+<td style="text-align: right;">0.200682</td>
+<td style="text-align: right;">0.900289</td>
+<td style="text-align: right;">0.985581</td>
+<td style="text-align: right;">0.944255</td>
+<td style="text-align: right;">0.901194</td>
+<td style="text-align: right;">0.973145</td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">0.175896</td>
+<td style="text-align: right;">0.20096</td>
+<td style="text-align: right;">0.90488</td>
+<td style="text-align: right;">0.986006</td>
+<td style="text-align: right;">0.949599</td>
+<td style="text-align: right;">0.900109</td>
+<td style="text-align: right;">0.973801</td>
+</tr>
+<tr>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">0.178888</td>
+<td style="text-align: right;">0.200853</td>
+<td style="text-align: right;">0.903853</td>
+<td style="text-align: right;">0.986053</td>
+<td style="text-align: right;">0.948513</td>
+<td style="text-align: right;">0.900109</td>
+<td style="text-align: right;">0.973879</td>
+</tr>
+</tbody>
+</table>
+<h2>Appendix: Detailed model summary</h2>
+<pre><code>MetaFormer (Input shape: 16 x 3 x 384 x 384)
+============================================================================
+Layer (type)         Output Shape         Param #    Trainable 
+============================================================================
+                     16 x 64 x 96 x 96   
+Conv2d                                    9472       True      
+LayerNorm2dNoBias                         64         True      
+Identity                                                       
+LayerNorm2dNoBias                         64         True      
+____________________________________________________________________________
+                     16 x 128 x 96 x 96  
+Conv2d                                    8192       True      
+ReLU                                                           
+Conv2d                                    6272       True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 64 x 96 x 96   
+Conv2d                                    8192       True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         64         True      
+____________________________________________________________________________
+                     16 x 256 x 96 x 96  
+Conv2d                                    16384      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 64 x 96 x 96   
+Conv2d                                    16384      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         64         True      
+____________________________________________________________________________
+                     16 x 128 x 96 x 96  
+Conv2d                                    8192       True      
+ReLU                                                           
+Conv2d                                    6272       True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 64 x 96 x 96   
+Conv2d                                    8192       True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         64         True      
+____________________________________________________________________________
+                     16 x 256 x 96 x 96  
+Conv2d                                    16384      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 64 x 96 x 96   
+Conv2d                                    16384      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         64         True      
+____________________________________________________________________________
+                     16 x 128 x 96 x 96  
+Conv2d                                    8192       True      
+ReLU                                                           
+Conv2d                                    6272       True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 64 x 96 x 96   
+Conv2d                                    8192       True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         64         True      
+____________________________________________________________________________
+                     16 x 256 x 96 x 96  
+Conv2d                                    16384      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 64 x 96 x 96   
+Conv2d                                    16384      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         64         True      
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    73856      True      
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 256 x 48 x 48  
+Conv2d                                    32768      True      
+ReLU                                                           
+Conv2d                                    12544      True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    32768      True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 512 x 48 x 48  
+Conv2d                                    65536      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    65536      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 256 x 48 x 48  
+Conv2d                                    32768      True      
+ReLU                                                           
+Conv2d                                    12544      True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    32768      True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 512 x 48 x 48  
+Conv2d                                    65536      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    65536      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 256 x 48 x 48  
+Conv2d                                    32768      True      
+ReLU                                                           
+Conv2d                                    12544      True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    32768      True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 512 x 48 x 48  
+Conv2d                                    65536      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    65536      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 256 x 48 x 48  
+Conv2d                                    32768      True      
+ReLU                                                           
+Conv2d                                    12544      True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    32768      True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 512 x 48 x 48  
+Conv2d                                    65536      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    65536      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 256 x 48 x 48  
+Conv2d                                    32768      True      
+ReLU                                                           
+Conv2d                                    12544      True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    32768      True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 512 x 48 x 48  
+Conv2d                                    65536      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    65536      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 256 x 48 x 48  
+Conv2d                                    32768      True      
+ReLU                                                           
+Conv2d                                    12544      True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    32768      True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 512 x 48 x 48  
+Conv2d                                    65536      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    65536      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 256 x 48 x 48  
+Conv2d                                    32768      True      
+ReLU                                                           
+Conv2d                                    12544      True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    32768      True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 512 x 48 x 48  
+Conv2d                                    65536      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    65536      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 256 x 48 x 48  
+Conv2d                                    32768      True      
+ReLU                                                           
+Conv2d                                    12544      True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    32768      True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 512 x 48 x 48  
+Conv2d                                    65536      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    65536      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 256 x 48 x 48  
+Conv2d                                    32768      True      
+ReLU                                                           
+Conv2d                                    12544      True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    32768      True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 512 x 48 x 48  
+Conv2d                                    65536      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    65536      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 256 x 48 x 48  
+Conv2d                                    32768      True      
+ReLU                                                           
+Conv2d                                    12544      True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    32768      True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 512 x 48 x 48  
+Conv2d                                    65536      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    65536      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 256 x 48 x 48  
+Conv2d                                    32768      True      
+ReLU                                                           
+Conv2d                                    12544      True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    32768      True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 512 x 48 x 48  
+Conv2d                                    65536      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    65536      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 256 x 48 x 48  
+Conv2d                                    32768      True      
+ReLU                                                           
+Conv2d                                    12544      True      
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    32768      True      
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 512 x 48 x 48  
+Conv2d                                    65536      True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 128 x 48 x 48  
+Conv2d                                    65536      True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Identity                                                       
+LayerNorm2dNoBias                         128        True      
+____________________________________________________________________________
+                     16 x 320 x 24 x 24  
+Conv2d                                    368960     True      
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 960      
+Linear                                    307200     True      
+Linear                                    102400     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           320        True      
+____________________________________________________________________________
+                     16 x 576 x 1280     
+Linear                                    409600     True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 576 x 320      
+Linear                                    409600     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNorm2dNoBias                         320        True      
+____________________________________________________________________________
+                     16 x 512 x 12 x 12  
+Conv2d                                    1475072    True      
+LayerNormNoBias                           512        True      
+____________________________________________________________________________
+                     16 x 144 x 1536     
+Linear                                    786432     True      
+Linear                                    262144     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           512        True      
+____________________________________________________________________________
+                     16 x 144 x 2048     
+Linear                                    1048576    True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 144 x 512      
+Linear                                    1048576    True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           512        True      
+____________________________________________________________________________
+                     16 x 144 x 1536     
+Linear                                    786432     True      
+Linear                                    262144     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           512        True      
+____________________________________________________________________________
+                     16 x 144 x 2048     
+Linear                                    1048576    True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 144 x 512      
+Linear                                    1048576    True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           512        True      
+____________________________________________________________________________
+                     16 x 144 x 1536     
+Linear                                    786432     True      
+Linear                                    262144     True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+LayerNormNoBias                           512        True      
+____________________________________________________________________________
+                     16 x 144 x 2048     
+Linear                                    1048576    True      
+ReLU                                                           
+Dropout                                                        
+Identity                                                       
+____________________________________________________________________________
+                     16 x 144 x 512      
+Linear                                    1048576    True      
+Dropout                                                        
+Identity                                                       
+Identity                                                       
+Scale                                                          
+____________________________________________________________________________
+                     16 x 512 x 1 x 1    
+AdaptiveAvgPool2d                                              
+Identity                                                       
+LayerNorm2d                               1024       True      
+____________________________________________________________________________
+                     16 x 512            
+Flatten                                                        
+Dropout                                                        
+____________________________________________________________________________
+                     16 x 2048           
+Linear                                    1050624    True      
+ReLU                                                           
+LayerNorm                                 4096       True      
+____________________________________________________________________________
+                     16 x 1              
+Linear                                    2049       True      
+Dropout                                                        
+____________________________________________________________________________
+
+Total params: 37,235,457
+Total trainable params: 37,235,457
+Total non-trainable params: 0
+
+Optimizer used: &lt;function Adam at 0x7fe3dd117060&gt;
+Loss function: FlattenedLoss of BCEWithLogitsLoss()
+
+Callbacks:
+  - TrainEvalCallback
+  - CastToTensor
+  - Recorder
+  - ProgressCallback
+  - CSVLogger
+</code></pre>
+</body>
+</html>
